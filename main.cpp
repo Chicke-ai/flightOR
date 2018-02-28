@@ -181,7 +181,7 @@ void solveByCplex()
     
     try {
         // i航班号，j停机位，k滑道号
-        int i, j, k;
+        int i, j, k, p;
         // 权重
         int parameter1 = 10;
         int parameter2 = 3;
@@ -250,45 +250,26 @@ void solveByCplex()
                 X[i][j] = 0;
             }
         }
-        // YIN[i][k]:航班i占用滑入滑道k
-        IloArray<IloBoolArray> YIN(env, N);
-        for (i = 0; i < N; i++)
-        {
-            YIN[i] = IloBoolArray(env, R);
-            for (k = 0; k < R; k++)
-            {
-                YIN[i][k] = 0;
-            }
-        }
-        // YOUT[i][k]:航班i占用推出滑道k
-        IloArray<IloBoolArray> YOUT(env, N);
-        for (i = 0; i < N; i++)
-        {
-            YOUT[i] = IloBoolArray(env, R);
-            for (k = 0; k < R; k++)
-            {
-                YOUT[i][k] = 0;
-            }
-        }
         
-        int N_once = 700;
-        int N_once_2 = 300;
-        int N_once_1 = N_once - N_once_2;
+//        int N_once = 700;
+//        int N_once_2 = 300;
+//        int N_once_1 = N_once - N_once_2;
+        
         bool runTimes =  true;
         int N_min = 0, N_max = 0;
         
         while (runTimes)
         {
             IloEnv env2;
-            N_max += N_once_1;
+            
+            N_max = N;
+            N_min = 0;
+            
             if (N_max >= N)
             {
                 N_max = N;
                 runTimes = false;
             }
-            N_min = N_max - N_once;
-            if (N_min < 0)
-                N_min = 0;
             
             cout << "开始计算第 " << N_min + 1 << " 架到第 " << N_max << " 架航班" << endl;
             
@@ -300,7 +281,7 @@ void solveByCplex()
             IloIntArray tComeBegin(env2, N_max - N_min);							// 航班进港时进入滑道时间(1*N)
             IloIntArray tComeEnd(env2, N_max - N_min);								// 航班进港时离开滑道时间(1*N)
             IloIntArray tGoBegin(env2, N_max - N_min);								// 航班出港时进入滑道时间(1*N)
-            IloIntArray tGoEnd(env2, N_max - N_min);								// 航班出港时离开滑道时间(1*N)
+            IloIntArray tGoEnd(env2, N_max - N_min);							// 航班出港时离开滑道时间(1*N)
             IloArray<IloIntArray> gatePositionToInRoad(env2);			// 机位-滑入滑道对应(M*R)
             IloArray<IloIntArray> gatePositionToOutRoad(env2);			// 机位-推出滑道对应(M*R)
             IloArray<IloIntArray> conflictFlightInIn(env2, N_max - N_min);			// 滑道时间上冲突的航班(N*N)，不考虑安排的滑道及机位，滑入滑道冲突
@@ -358,49 +339,8 @@ void solveByCplex()
             {
                 x[i] = IloBoolVarArray(env2, M);
             }
-            IloArray<IloBoolVarArray> yin(env2, N_max - N_min);	// 航班i滑入使用滑道k
-            for (i = 0; i < N_max - N_min; i++)
-            {
-                yin[i] = IloBoolVarArray(env2, R);
-            }
-            IloArray<IloBoolVarArray> yout(env2, N_max - N_min);	// 航班i滑出使用滑道k
-            for (i = 0; i < N_max - N_min; i++)
-            {
-                yout[i] = IloBoolVarArray(env2, R);
-            }
+
             IloBoolVarArray z2(env2, N_max - N_min);// 航班i是否与其他航班冲突
-            
-            if (N_max - N_min > N_once_1)
-            {
-                int N_readNum = 0;
-                int N_middle = N_max - N_min;
-                if (N_middle < N_once)
-                    N_readNum = N_max - N_once_1;
-                else
-                    N_readNum = N_once_2;
-                // 读取上一次的解
-                for (i = 0; i < N_readNum; i++)
-                {
-                    for (j = 0; j < M; j++)
-                    {
-                        model.add(x[i][j] == X[i + N_min][j]);
-                    }
-                }
-                for (i = 0; i < N_readNum; i++)
-                {
-                    for (k = 0; k < R; k++)
-                    {
-                        model.add(yin[i][k] == YIN[i + N_min][k]);
-                    }
-                }
-                for (i = 0; i < N_readNum; i++)
-                {
-                    for (k = 0; k < R; k++)
-                    {
-                        model.add(yout[i][k] == YOUT[i + N_min][k]);
-                    }
-                }
-            }
             
             // 目标函数
             // 第一部分，计算分配完成率
@@ -459,55 +399,82 @@ void solveByCplex()
             }
             IloNumExpr temporaryMeasuresSum = IloSum(temporaryMeasuresTemp) / (double)(N_max - N_min);
             // 第五部分，航班冲突率
+//            IloNumExprArray roadConflictCountTemp(env2, N_max - N_min);
             for (i = 0; i < N_max - N_min - 1; i++)
             {
+//                roadConflictCountTemp[i] = IloNumExpr(env2);
                 for (j = i + 1; j < N_max - N_min; j++)
                 {
+                    
                     if (conflictFlightInIn[i][j] == 1)
                     {
-                        for (k = 0; k < R; k++)
-                        {
-                            if (noLimit[k] == 1)
-                            {
-                                // 精度修改
-                                model.add(z2[i] >= yin[i][k] + yin[j][k] - 1.1);
-                                model.add(z2[j] >= yin[i][k] + yin[j][k] - 1.1);
+                        int p1, p2;
+                        for (p1 = 0; p1 < M; p1++) {
+                            for (p2 = 0; p2 < M; p2++){
+                                for (k = 0; k < R; k++) {
+                                    if (noLimit[k] == 1) {
+                                        if (gatePositionToInRoad[p1][k] == 1 && gatePositionToInRoad[p2][k] == 1) {
+//                                            roadConflictCountTemp[i] = roadConflictCountTemp[i] + x[i][p1];
+//                                            roadConflictCountTemp[j] = roadConflictCountTemp[j] + x[j][p2];
+                                            model.add(z2[i] >= x[i][p1] + x[j][p2] - 1);
+                                            model.add(z2[j] >= x[i][p1] + x[j][p2] - 1);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                     if (conflictFlightOutOut[i][j] == 1)
                     {
-                        for (k = 0; k < R; k++)
-                        {
-                            if (noLimit[k] == 1)
-                            {
-                                // 精度修改
-                                model.add(z2[i] >= yout[i][k] + yout[j][k] - 1.1);
-                                model.add(z2[j] >= yout[i][k] + yout[j][k] - 1.1);
+                        int p1, p2;
+                        for (p1 = 0; p1 < M; p1++) {
+                            for (p2 = 0; p2 < M; p2++){
+                                for (k = 0; k < R; k++) {
+                                    if (noLimit[k] == 1) {
+                                        if (gatePositionToOutRoad[p1][k] == 1 && gatePositionToOutRoad[p2][k] == 1) {
+                                            //                                            roadConflictCountTemp[i] = roadConflictCountTemp[i] + x[i][p1];
+                                            //                                            roadConflictCountTemp[j] = roadConflictCountTemp[j] + x[j][p2];
+                                            model.add(z2[i] >= x[i][p1] + x[j][p2] - 1);
+                                            model.add(z2[j] >= x[i][p1] + x[j][p2] - 1);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                     if (conflictFlightInOut[i][j] == 1)
                     {
-                        for (k = 0; k < R; k++)
-                        {
-                            if (noLimit[k] == 1)
-                            {
-                                // 精度修改
-                                model.add(z2[i] >= yin[i][k] + yout[j][k] - 1.1);
-                                model.add(z2[j] >= yin[i][k] + yout[j][k] - 1.1);
+                        int p1, p2;
+                        for (p1 = 0; p1 < M; p1++) {
+                            for (p2 = 0; p2 < M; p2++){
+                                for (k = 0; k < R; k++) {
+                                    if (noLimit[k] == 1) {
+                                        if (gatePositionToInRoad[p1][k] == 1 && gatePositionToOutRoad[p2][k] == 1) {
+                                            //                                            roadConflictCountTemp[i] = roadConflictCountTemp[i] + x[i][p1];
+                                            //                                            roadConflictCountTemp[j] = roadConflictCountTemp[j] + x[j][p2];
+                                            model.add(z2[i] >= x[i][p1] + x[j][p2] - 1);
+                                            model.add(z2[j] >= x[i][p1] + x[j][p2] - 1);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
                     if (conflictFlightOutIn[i][j] == 1)
                     {
-                        for (k = 0; k < R; k++)
-                        {
-                            if (noLimit[k] == 1)
-                            {
-                                // 精度修改
-                                model.add(z2[i] >= yout[i][k] + yin[j][k] - 1.1);
-                                model.add(z2[j] >= yout[i][k] + yin[j][k] - 1.1);
+                        int p1, p2;
+                        for (p1 = 0; p1 < M; p1++) {
+                            for (p2 = 0; p2 < M; p2++){
+                                for (k = 0; k < R; k++) {
+                                    if (noLimit[k] == 1) {
+                                        if (gatePositionToOutRoad[p1][k] == 1 && gatePositionToInRoad[p2][k] == 1) {
+                                            //                                            roadConflictCountTemp[i] = roadConflictCountTemp[i] + x[i][p1];
+                                            //                                            roadConflictCountTemp[j] = roadConflictCountTemp[j] + x[j][p2];
+                                            model.add(z2[i] >= x[i][p1] + x[j][p2] - 1);
+                                            model.add(z2[j] >= x[i][p1] + x[j][p2] - 1);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -536,17 +503,6 @@ void solveByCplex()
                 model.add(xTemp1[i] <= 1.1);
             }
             
-            //for (i = 0; i < N_max - N_min; i++)
-            //{
-            //	for (j = 0; j < M; j++)
-            //	{
-            //		if (feasibleFlight[i][j] == 0)
-            //			model.add(x[i][j] == 0);
-            //	}
-            //	// 精度修改
-            //	model.add(IloSum(x[i]) <= 1.1);
-            //}
-            
             // 约束条件2 同一机位同一时刻只能停一架航班
             for (j = 0; j < M; j++)
             {
@@ -558,41 +514,6 @@ void solveByCplex()
                         {
                             // 精度修改
                             model.add(x[i1][j] + x[i2][j] <= 1.1);
-                        }
-                    }
-                }
-            }
-            
-            // 约束条件3，航班所使用滑道的约束
-            for (i = 0; i < N_max - N_min; i++)
-            {
-                if (IloSum(feasibleFlight[i]) == 0)
-                {
-                    model.add(IloSum(yin[i]) == 0);
-                    model.add(IloSum(yout[i]) == 0);
-                    //for (k = 0; k < R; k++)
-                    //{
-                    //	model.add(yin[i][k] == 0);
-                    //	model.add(yout[i][k] == 0);
-                    //}
-                    continue;
-                }
-                model.add(IloSum(yin[i]) == IloSum(x[i]));
-                model.add(IloSum(yout[i]) == IloSum(x[i]));
-                for (j = 0; j < M; j++)
-                {
-                    if (feasibleFlight[i][j] == 1)
-                    {
-                        for (k = 0; k < R; k++)
-                        {
-                            if (gatePositionToInRoad[j][k] == 1)
-                            {
-                                model.add(yin[i][k] >= x[i][j]);
-                            }
-                            if (gatePositionToOutRoad[j][k] == 1)
-                            {
-                                model.add(yout[i][k] >= x[i][j]);
-                            }
                         }
                     }
                 }
@@ -663,7 +584,7 @@ void solveByCplex()
             //cplex2.setParam(IloCplex::TiLim, 600);
             
             //设置Gap
-            cplex2.setParam(IloCplex::EpGap, 0.002);
+            cplex2.setParam(IloCplex::EpGap, 0);
             
             //执行求解
             cplex2.solve();
@@ -676,20 +597,20 @@ void solveByCplex()
                     X[i + N_min][j] = (int)((double)cplex2.getValue(x[i][j]) + 0.5);
                 }
             }
-            for (i = 0; i < N_max - N_min; i++)
-            {
-                for (k = 0; k < R; k++)
-                {
-                    YIN[i + N_min][k] = (int)((double)cplex2.getValue(yin[i][k]) + 0.5);
-                }
-            }
-            for (i = 0; i < N_max - N_min; i++)
-            {
-                for (k = 0; k < R; k++)
-                {
-                    YOUT[i + N_min][k] = (int)((double)cplex2.getValue(yout[i][k]) + 0.5);
-                }
-            }
+//            for (i = 0; i < N_max - N_min; i++)
+//            {
+//                for (k = 0; k < R; k++)
+//                {
+//                    YIN[i + N_min][k] = (int)((double)cplex2.getValue(yin[i][k]) + 0.5);
+//                }
+//            }
+//            for (i = 0; i < N_max - N_min; i++)
+//            {
+//                for (k = 0; k < R; k++)
+//                {
+//                    YOUT[i + N_min][k] = (int)((double)cplex2.getValue(yout[i][k]) + 0.5);
+//                }
+//            }
             
             //// 调试用
             //char N_min_char[5];

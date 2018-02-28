@@ -49,7 +49,7 @@ Flight::Flight(string	companyNo, string flightNo, string inTime, string outTime,
 
 void Flight::readData()
 {
-    ifstream file("历史航班.csv");
+    ifstream file("历史航班250.csv");
     if (file.bad()) {
         std::cout<<"bad========"<<endl;
         cerr << "Error: " << strerror(errno);

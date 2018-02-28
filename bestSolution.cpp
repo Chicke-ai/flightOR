@@ -824,6 +824,7 @@ double BestSolution::getObjectiveFunction()
             break;
     }
     objvalue1 = parameter1 * (distributionFlightCount / (double)(Flight::s_flightCount + Flight::s_wrongFlightCount));
+    cout << "最终分配的航班数量:" << distributionFlightCount << endl;
     objvalue2 = parameter2 * (distanceGatePositionCount / (double)(Flight::s_flightCount + Flight::s_wrongFlightCount));
     objvalue3 = parameter3 * (distanceGatePositionNumberCount / (double)Flight::s_nemberCount);
     objvalue4 = parameter4 * (temporaryMeasuresSum / (double)(Flight::s_flightCount + Flight::s_wrongFlightCount));
